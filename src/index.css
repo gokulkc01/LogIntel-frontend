@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens ── */
+:root {
+  --bg-primary:   #0f1117;
+  --bg-secondary: #131720;
+  --bg-tertiary:  #161b27;
+  --bg-border:    #1e2433;
+  --bg-hover:     #1a2035;
+  --text-primary: #e2e8f0;
+  --text-muted:   #64748b;
+  --text-dim:     #374151;
+  --accent:       #3b82f6;
+}
+
+[data-theme="light"] {
+  --bg-primary:   #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary:  #f1f5f9;
+  --bg-border:    #e2e8f0;
+  --bg-hover:     #f1f5f9;
+  --text-primary: #0f172a;
+  --text-muted:   #64748b;
+  --text-dim:     #94a3b8;
+  --accent:       #2563eb;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--bg-border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* Tour spotlight */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.65);
+  z-index: 9998;
+  pointer-events: all;
+}
+[data-theme="light"] .tour-overlay {
+  background: rgba(0,0,0,0.45);
+}
+.tour-highlight {
+  position: relative;
+  z-index: 9999;
+  border-radius: 12px;
+  box-shadow: 0 0 0 4px #3b82f6, 0 0 0 8px rgba(59,130,246,0.2);
+  pointer-events: none;
+}
+.tour-tooltip {
+  position: fixed;
+  z-index: 10000;
+  width: 300px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+}
