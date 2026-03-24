@@ -1,30 +1,45 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAnalysisStore, TOUR_STEPS } from '../stores/analysisStore'
 
-function computeTooltipStyle(rect, position, tooltipW = 300, tooltipH = 200) {
-  if (!rect) return { top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }
+const MotionDiv = motion.div
 
+function computeTooltipStyle(rect, position, tooltipW, tooltipH) {
+  const viewportPadding = 8
   const margin = 14
   const vw = window.innerWidth
   const vh = window.innerHeight
+  const safeWidth = Math.min(tooltipW, vw - viewportPadding * 2)
+  const safeHeight = Math.min(tooltipH, vh - viewportPadding * 2)
 
-  let top, left, transform = ''
+  if (!rect) {
+    return {
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%,-50%)',
+      width: safeWidth,
+      maxHeight: safeHeight,
+    }
+  }
+
+  let top
+  let left
+  let transform = ''
 
   if (position === 'right') {
     left = rect.right + margin
     top  = rect.top + rect.height / 2
     transform = 'translateY(-50%)'
     // Flip left if overflows right edge
-    if (left + tooltipW > vw - 8) {
-      left = rect.left - tooltipW - margin
+    if (left + safeWidth > vw - viewportPadding) {
+      left = rect.left - safeWidth - margin
     }
   } else if (position === 'left') {
-    left = rect.left - tooltipW - margin
+    left = rect.left - safeWidth - margin
     top  = rect.top + rect.height / 2
     transform = 'translateY(-50%)'
     // Flip right if overflows left edge
-    if (left < 8) {
+    if (left < viewportPadding) {
       left = rect.right + margin
     }
   } else {
@@ -33,27 +48,40 @@ function computeTooltipStyle(rect, position, tooltipW = 300, tooltipH = 200) {
     top  = rect.bottom + margin
     transform = 'translateX(-50%)'
     // Flip above if overflows bottom
-    if (top + tooltipH > vh - 8) {
-      top = rect.top - tooltipH - margin
+    if (top + safeHeight > vh - viewportPadding) {
+      top = rect.top - safeHeight - margin
     }
   }
 
   // Clamp to viewport
-  left = Math.max(8, Math.min(left, vw - tooltipW - 8))
-  top  = Math.max(8, Math.min(top,  vh - tooltipH - 8))
+  left = Math.max(viewportPadding, Math.min(left, vw - safeWidth - viewportPadding))
+  top  = Math.max(viewportPadding, Math.min(top,  vh - safeHeight - viewportPadding))
 
-  return { top, left, transform }
+  return { top, left, transform, width: safeWidth, maxHeight: safeHeight }
 }
 
 export default function Tour() {
   const { tourActive, tourStep, nextTourStep, endTour } = useAnalysisStore()
   const step = TOUR_STEPS[tourStep]
   const [tooltipStyle, setTooltipStyle] = useState({})
+  const tooltipRef = useRef(null)
 
   useEffect(() => {
     if (!tourActive || !step) return
 
     const el = document.getElementById(step.target)
+    let timeoutId
+
+    const updateTooltipPosition = () => {
+      const rect = el?.getBoundingClientRect()
+      const tooltipRect = tooltipRef.current?.getBoundingClientRect()
+      setTooltipStyle(computeTooltipStyle(
+        rect,
+        step.position,
+        tooltipRect?.width ?? 300,
+        tooltipRect?.height ?? 260,
+      ))
+    }
 
     // Remove highlight from all elements first
     TOUR_STEPS.forEach(s => {
@@ -65,16 +93,19 @@ export default function Tour() {
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
 
       // Wait for scroll then measure
-      setTimeout(() => {
-        const rect = el.getBoundingClientRect()
-        setTooltipStyle(computeTooltipStyle(rect, step.position))
-      }, 120)
+      timeoutId = window.setTimeout(updateTooltipPosition, 120)
+    } else {
+      updateTooltipPosition()
     }
 
+    window.addEventListener('resize', updateTooltipPosition)
+
     return () => {
+      if (timeoutId) window.clearTimeout(timeoutId)
+      window.removeEventListener('resize', updateTooltipPosition)
       el?.classList.remove('tour-highlight')
     }
-  }, [tourActive, tourStep])
+  }, [tourActive, tourStep, step])
 
   // Clean up all highlights when tour ends
   useEffect(() => {
@@ -97,10 +128,18 @@ export default function Tour() {
       />
 
       {/* Tooltip */}
-      <motion.div
+      <MotionDiv
+        ref={tooltipRef}
         key={`tooltip-${tourStep}`}
         className="tour-tooltip"
-        style={{ position: 'fixed', width: 300, ...tooltipStyle }}
+        style={{
+          position: 'fixed',
+          width: 'min(300px, calc(100vw - 16px))',
+          maxWidth: 'calc(100vw - 16px)',
+          maxHeight: 'calc(100vh - 16px)',
+          overflowY: 'auto',
+          ...tooltipStyle,
+        }}
         initial={{ opacity: 0, scale: 0.94 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.94 }}
@@ -166,7 +205,7 @@ export default function Tour() {
             {tourStep === TOUR_STEPS.length - 1 ? 'Done ✓' : 'Next →'}
           </button>
         </div>
-      </motion.div>
+      </MotionDiv>
     </AnimatePresence>
   )
 }

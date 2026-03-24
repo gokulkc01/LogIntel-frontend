@@ -48,6 +48,7 @@ function LogLine({ lineNum, text, finding }) {
 export default function LogViewer() {
   const {
     content, result,
+    contentPreviewTruncated,
     isStreaming, streamFindings,
     streamProgress, streamComplete,
   } = useAnalysisStore()
@@ -108,6 +109,12 @@ export default function LogViewer() {
               ? `Streaming · chunk ${streamProgress.chunk} / ${streamProgress.total || '?'}`
               : `Complete · ${findings.length} findings detected`}
           </span>
+        </div>
+      )}
+
+      {contentPreviewTruncated && (
+        <div className="mx-4 mt-3 shrink-0 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[11px] text-blue-300">
+          Showing a preview of the uploaded file to keep the UI responsive. The backend still analyzes the full file.
         </div>
       )}
 

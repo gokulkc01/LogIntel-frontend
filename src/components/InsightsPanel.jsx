@@ -1,8 +1,12 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAnalysisStore } from '../stores/analysisStore'
 import RiskBadge from './RiskBadge'
 import { generatePDFReport } from '../utils/generateReport'
+
+const MotionCircle = motion.circle
+const MotionDiv = motion.div
+
 const RISK_COLOR = {
   critical: '#ef4444',
   high:     '#f59e0b',
@@ -25,20 +29,13 @@ function RiskDial({ score, level }) {
   const dash = circ * pct
   const color = RISK_COLOR[level] || '#64748b'
 
-  const { content, inputType } = useAnalysisStore()
-
-const handleDownload = () => {
-  if (!result) return
-  generatePDFReport(result, inputType, content)
-}
-
   return (
     <div className="flex flex-col items-center py-5">
       <div className="relative w-24 h-24">
         <svg viewBox="0 0 90 90" className="w-24 h-24 -rotate-90">
           <circle cx="45" cy="45" r={r} fill="none"
             stroke="#1e2433" strokeWidth="7" />
-          <motion.circle cx="45" cy="45" r={r} fill="none"
+          <MotionCircle cx="45" cy="45" r={r} fill="none"
             stroke={color} strokeWidth="7"
             strokeLinecap="round"
             strokeDasharray={circ}
@@ -61,14 +58,17 @@ const handleDownload = () => {
 }
 
 export default function InsightsPanel() {
-  const { result, isStreaming, streamFindings, streamComplete, error } = useAnalysisStore()
+  const { result, lastCompletedResult, streamFindings, isStreaming, isLoading, error, content, inputType } = useAnalysisStore()
+  const [showAllFindings, setShowAllFindings] = useState(false)
 
-  const findings = result?.findings || streamFindings
-  const insights = result?.insights || []
-  const summary  = result?.summary  || ''
-  const score    = result?.risk_score ?? 0
-  const level    = result?.risk_level ?? 'low'
-  const action   = result?.action
+  const activeResult = result || lastCompletedResult
+
+  const findings = activeResult?.findings || streamFindings
+  const insights = activeResult?.insights || []
+  const summary  = activeResult?.summary  || ''
+  const score    = activeResult?.risk_score ?? 0
+  const level    = activeResult?.risk_level ?? 'low'
+  const action   = activeResult?.action
 
   const counts = useMemo(() => ({
     critical: findings.filter(f => f.risk === 'critical').length,
@@ -77,7 +77,14 @@ export default function InsightsPanel() {
     low:      findings.filter(f => f.risk === 'low').length,
   }), [findings])
 
-  const hasData = findings.length > 0 || result
+  const hasData = findings.length > 0 || activeResult
+  const visibleFindings = showAllFindings ? findings : findings.slice(0, 150)
+  const isResultRetained = !result && !!lastCompletedResult && (isStreaming || isLoading)
+
+  const handleDownload = () => {
+    if (!activeResult) return
+    generatePDFReport(activeResult, inputType, content)
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -125,6 +132,12 @@ export default function InsightsPanel() {
         {error && (
           <div className="m-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs">
             {error}
+          </div>
+        )}
+
+        {isResultRetained && (
+          <div className="m-4 p-3 rounded-lg border border-blue-500/20 bg-blue-500/5 text-[11px] text-blue-300">
+            Showing the last completed analysis while the new run is processing.
           </div>
         )}
 
@@ -176,8 +189,8 @@ export default function InsightsPanel() {
                 </h3>
                 <div className="space-y-1.5">
                   <AnimatePresence>
-                    {findings.map((f, i) => (
-                      <motion.div key={`${f.line}-${f.type}-${i}`}
+                    {visibleFindings.map((f, i) => (
+                      <MotionDiv key={`${f.line}-${f.type}-${i}`}
                         initial={{ opacity: 0, y: 4 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.2, delay: i * 0.03 }}
@@ -197,10 +210,20 @@ export default function InsightsPanel() {
                             {f.value}
                           </p>
                         )}
-                      </motion.div>
+                      </MotionDiv>
                     ))}
                   </AnimatePresence>
                 </div>
+                {findings.length > visibleFindings.length && (
+                  <div className="pt-3 text-center">
+                    <button
+                      onClick={() => setShowAllFindings(true)}
+                      className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-1.5 text-[11px] text-blue-300 transition-colors hover:bg-blue-500/10"
+                    >
+                      Show all {findings.length} findings
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -213,7 +236,7 @@ export default function InsightsPanel() {
                 </h3>
                 <div className="space-y-0">
                   {insights.map((insight, i) => (
-                    <motion.div key={i}
+                    <MotionDiv key={i}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       transition={{ delay: i * 0.1 }}
@@ -225,7 +248,7 @@ export default function InsightsPanel() {
                         {i + 1}
                       </span>
                       <p className="text-[12px] text-slate-400 leading-relaxed">{insight}</p>
-                    </motion.div>
+                    </MotionDiv>
                   ))}
                 </div>
               </div>

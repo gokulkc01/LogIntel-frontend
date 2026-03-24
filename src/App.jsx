@@ -34,7 +34,7 @@ function MoonIcon() {
 }
 
 export default function App() {
-  const { theme, toggleTheme, startTour, endTour } = useAnalysisStore()
+  const { theme, toggleTheme, startTour } = useAnalysisStore()
   const [activeTab, setActiveTab] = useState(0)
 
   // Apply theme on mount + change
@@ -48,7 +48,7 @@ export default function App() {
     if (!seen) {
       setTimeout(() => startTour(), 800)
     }
-  }, [])
+  }, [startTour])
 
   const isDark = theme === 'dark'
 

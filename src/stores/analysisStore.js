@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
-export const useAnalysisStore = create((set, get) => ({
+export const useAnalysisStore = create(persist((set) => ({
   // ── Theme ──
   theme: localStorage.getItem('theme') || 'dark',
   toggleTheme: () => set((s) => {
@@ -26,6 +27,7 @@ export const useAnalysisStore = create((set, get) => ({
 
   // ── Result state ──
   result: null,
+  lastCompletedResult: null,
   isLoading: false,
   error: null,
 
@@ -38,6 +40,9 @@ export const useAnalysisStore = create((set, get) => ({
   // ── Input state ──
   inputType: 'log',
   content: '',
+  selectedFile: null,
+  requiresFileReselect: false,
+  contentPreviewTruncated: false,
   filename: '',
   options: {
     mask: true,
@@ -49,18 +54,26 @@ export const useAnalysisStore = create((set, get) => ({
   // ── Actions ──
   setInputType: (t) => set({ inputType: t }),
   setContent:   (c) => set({ content: c }),
+  setSelectedFile: (file) => set({ selectedFile: file, requiresFileReselect: false }),
+  setContentPreviewTruncated: (value) => set({ contentPreviewTruncated: value }),
   setFilename:  (f) => set({ filename: f }),
+  clearSelectedFile: () => set({
+    selectedFile: null,
+    requiresFileReselect: false,
+    filename: '',
+    contentPreviewTruncated: false,
+    content: '',
+  }),
   setOption: (key, val) =>
     set((s) => ({ options: { ...s.options, [key]: val } })),
   setLoading: (v) => set({ isLoading: v }),
   setError:   (e) => set({ error: e }),
-  setResult:  (r) => set({ result: r, isLoading: false, error: null }),
+  setResult:  (r) => set({ result: r, lastCompletedResult: r, isLoading: false, error: null }),
   startStream: () => set({
     isStreaming: true,
     streamFindings: [],
     streamProgress: { chunk: 0, total: 0 },
     streamComplete: false,
-    result: null,
     error: null,
   }),
   appendStreamFindings: (findings) =>
@@ -68,12 +81,54 @@ export const useAnalysisStore = create((set, get) => ({
   setStreamProgress: (chunk, total) =>
     set({ streamProgress: { chunk, total } }),
   finalizeStream: (summary) =>
-    set({ isStreaming: false, streamComplete: true, result: summary }),
+    set({ isStreaming: false, streamComplete: true, result: summary, lastCompletedResult: summary }),
   reset: () => set({
     result: null, isLoading: false, error: null,
     isStreaming: false, streamFindings: [],
     streamProgress: { chunk: 0, total: 0 }, streamComplete: false,
   }),
+  restartAnalysis: () => set({
+    result: null,
+    isLoading: false,
+    error: null,
+    isStreaming: false,
+    streamFindings: [],
+    streamProgress: { chunk: 0, total: 0 },
+    streamComplete: false,
+  }),
+}), {
+  name: 'analysis-store',
+  storage: createJSONStorage(() => localStorage),
+  partialize: (state) => ({
+    theme: state.theme,
+    result: state.result,
+    lastCompletedResult: state.lastCompletedResult,
+    inputType: state.inputType,
+    content: state.content,
+    requiresFileReselect: state.selectedFile ? true : state.requiresFileReselect,
+    contentPreviewTruncated: state.contentPreviewTruncated,
+    filename: state.filename,
+    options: state.options,
+  }),
+  merge: (persisted, current) => {
+    const merged = {
+      ...current,
+      ...persisted,
+      selectedFile: null,
+      isLoading: false,
+      isStreaming: false,
+      streamFindings: [],
+      streamProgress: { chunk: 0, total: 0 },
+      streamComplete: false,
+      error: null,
+    }
+
+    if (merged.requiresFileReselect) {
+      merged.selectedFile = null
+    }
+
+    return merged
+  },
 }))
 
 export const TOUR_STEPS = [

@@ -7,31 +7,11 @@ const RISK_COLORS = {
   low:      [100, 116, 139],
 }
 
-const RISK_BG = {
-  critical: [80, 20, 20],
-  high:     [80, 50, 10],
-  medium:   [80, 40, 10],
-  low:      [40, 45, 55],
-}
-
 function riskColor(level) {
   return RISK_COLORS[level] || RISK_COLORS.low
 }
 
-function wrap(doc, text, x, maxWidth, lineHeight) {
-  const lines = doc.splitTextToSize(text, maxWidth)
-  lines.forEach(line => {
-    const pageH = doc.internal.pageSize.getHeight()
-    if (doc.y + lineHeight > pageH - 20) {
-      doc.addPage()
-      doc.y = 30
-    }
-    doc.text(line, x, doc.y)
-    doc.y += lineHeight
-  })
-}
-
-export function generatePDFReport(result, inputType, content) {
+export function generatePDFReport(result, inputType) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pw = doc.internal.pageSize.getWidth()   // 210
   const ph = doc.internal.pageSize.getHeight()  // 297
@@ -122,7 +102,7 @@ export function generatePDFReport(result, inputType, content) {
     ['RISK LEVEL', level.toUpperCase()],
   ]
   const colW = contentW / cols.length
-  cols.forEach(([label, value], i) => {
+  cols.forEach(([label], i) => {
     const x = margin + i * colW + 3
     doc.setTextColor(100, 116, 139)
     doc.text(label, x, doc.y + 4.5)

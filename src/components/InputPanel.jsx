@@ -2,7 +2,10 @@ import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion } from 'framer-motion'
 import { useAnalysisStore } from '../stores/analysisStore'
-import { analyze, analyzeStream } from '../api/client'
+import { analyze, analyzeStream, analyzeUpload, analyzeUploadStream } from '../api/client'
+
+const MotionButton = motion.button
+const PREVIEW_BYTES = 64 * 1024
 
 const INPUT_TYPES = [
   { id: 'log',  label: 'Log file' },
@@ -32,31 +35,41 @@ export default function InputPanel() {
   const {
     inputType, setInputType,
     content, setContent,
+    selectedFile, setSelectedFile,
+    requiresFileReselect,
+    contentPreviewTruncated, setContentPreviewTruncated,
+    clearSelectedFile,
     filename, setFilename,
     options, setOption,
     isLoading, isStreaming,
     startStream, appendStreamFindings,
     setStreamProgress, finalizeStream,
-    setLoading, setResult, setError, reset,
+    setLoading, setResult, setError, reset, restartAnalysis,
   } = useAnalysisStore()
 
-  const onDrop = useCallback((accepted) => {
+  const onDrop = useCallback(async (accepted) => {
     const file = accepted[0]
     if (!file) return
+    setSelectedFile(file)
     setFilename(file.name)
     const ext = file.name.split('.').pop().toLowerCase()
     if (['log', 'txt'].includes(ext)) setInputType('log')
     else if (['pdf'].includes(ext)) setInputType('file')
     else if (['doc', 'docx'].includes(ext)) setInputType('file')
 
-    const reader = new FileReader()
-    reader.onload = (e) => setContent(e.target.result)
     if (['pdf', 'doc', 'docx'].includes(ext)) {
-      reader.readAsDataURL(file)
-    } else {
-      reader.readAsText(file, 'utf-8')
+      setContent(`[Binary document selected: ${file.name}]`)
+      setContentPreviewTruncated(false)
+      return
     }
-  }, [setContent, setFilename, setInputType])
+
+    const previewText = await file.slice(0, PREVIEW_BYTES).text()
+    const hasMore = file.size > PREVIEW_BYTES
+    setContentPreviewTruncated(hasMore)
+    setContent(hasMore
+      ? `${previewText}\n\n[Preview truncated. Full file will be uploaded to the backend for analysis.]`
+      : previewText)
+  }, [setContent, setContentPreviewTruncated, setFilename, setInputType, setSelectedFile])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -70,35 +83,54 @@ export default function InputPanel() {
   })
 
   const handleAnalyze = async () => {
-    if (!content.trim()) return
+    if (!content.trim() && !selectedFile) return
     reset()
 
-    const payload = {
-      input_type: inputType,
-      content,
-      filename: filename || undefined,
-      options: {
-        mask: options.mask,
-        block_high_risk: options.block_high_risk,
-        log_analysis: options.log_analysis,
-      }
+    const requestOptions = {
+      mask: options.mask,
+      block_high_risk: options.block_high_risk,
+      log_analysis: options.log_analysis,
     }
 
     if (options.streaming) {
       startStream()
-      await analyzeStream(
-        payload,
-        (chunk) => {
-          if (chunk.findings) appendStreamFindings(chunk.findings)
-          if (chunk.chunk) setStreamProgress(chunk.chunk, chunk.total_chunks)
-        },
-        (final) => finalizeStream(final),
-        (err) => setError(err)
-      )
+      if (selectedFile) {
+        await analyzeUploadStream(
+          { file: selectedFile, inputType, options: requestOptions },
+          (chunk) => {
+            if (chunk.findings) appendStreamFindings(chunk.findings)
+            if (chunk.chunk) setStreamProgress(chunk.chunk, chunk.total_chunks)
+          },
+          (final) => finalizeStream(final),
+          (err) => setError(err)
+        )
+      } else {
+        await analyzeStream(
+          {
+            input_type: inputType,
+            content,
+            filename: filename || undefined,
+            options: requestOptions,
+          },
+          (chunk) => {
+            if (chunk.findings) appendStreamFindings(chunk.findings)
+            if (chunk.chunk) setStreamProgress(chunk.chunk, chunk.total_chunks)
+          },
+          (final) => finalizeStream(final),
+          (err) => setError(err)
+        )
+      }
     } else {
       setLoading(true)
       try {
-        const result = await analyze(payload)
+        const result = selectedFile
+          ? await analyzeUpload({ file: selectedFile, inputType, options: requestOptions })
+          : await analyze({
+              input_type: inputType,
+              content,
+              filename: filename || undefined,
+              options: requestOptions,
+            })
         setResult(result)
       } catch (e) {
         setError(e.message)
@@ -166,6 +198,33 @@ export default function InputPanel() {
           )}
         </div>
 
+        {selectedFile && contentPreviewTruncated && (
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-[11px] text-blue-300">
+            Large file preview loaded. Only a small preview is shown in the UI; the full file will be sent directly to the backend during analysis.
+          </div>
+        )}
+
+        {requiresFileReselect && !selectedFile && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-300">
+            The browser was refreshed, so the previously selected file cannot be restored automatically. Re-select the file to analyze it again.
+          </div>
+        )}
+
+        {selectedFile && (
+          <div className="flex items-center justify-between rounded-lg border border-bg-border bg-bg-secondary px-3 py-2">
+            <div className="min-w-0 pr-3">
+              <p className="truncate text-[12px] font-medium text-slate-300">{filename}</p>
+              <p className="text-[10px] text-slate-600">Uploaded file ready for analysis</p>
+            </div>
+            <button
+              onClick={clearSelectedFile}
+              className="shrink-0 rounded-lg border border-slate-700 px-2.5 py-1 text-[11px] text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+            >
+              Remove file
+            </button>
+          </div>
+        )}
+
         {/* Paste area */}
         <div>
           <label className="text-[10px] font-semibold tracking-widest uppercase text-slate-600 block mb-2">
@@ -173,7 +232,10 @@ export default function InputPanel() {
           </label>
           <textarea
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              clearSelectedFile()
+              setContent(e.target.value)
+            }}
             placeholder={`Paste ${inputType} content here...`}
             className="w-full h-32 bg-bg-secondary border border-bg-border rounded-lg p-3
               text-[11px] font-mono text-slate-300 placeholder-slate-700
@@ -209,19 +271,32 @@ export default function InputPanel() {
 
       {/* Analyze button */}
       <div className="p-4 border-t border-bg-border">
-        <motion.button
-          onClick={handleAnalyze}
-          disabled={busy || !content.trim()}
-          whileTap={{ scale: 0.98 }}
-          className={`w-full py-2.5 rounded-xl text-sm font-semibold tracking-wide
-            transition-all duration-200 ${
-            busy || !content.trim()
-              ? 'bg-bg-border text-slate-600 cursor-not-allowed'
-              : 'bg-blue-500 hover:bg-blue-400 text-white'
-          }`}
-        >
-          {isStreaming ? 'Streaming...' : isLoading ? 'Analyzing...' : 'Analyze'}
-        </motion.button>
+        <div className="flex gap-2">
+          <button
+            onClick={restartAnalysis}
+            disabled={busy}
+            className={`shrink-0 rounded-xl border px-4 py-2.5 text-[12px] font-semibold transition-all duration-200 ${
+              busy
+                ? 'border-bg-border text-slate-600 cursor-not-allowed'
+                : 'border-slate-700 text-slate-300 hover:border-slate-500 hover:text-slate-100'
+            }`}
+          >
+            Restart
+          </button>
+          <MotionButton
+            onClick={handleAnalyze}
+            disabled={busy || (!content.trim() && !selectedFile)}
+            whileTap={{ scale: 0.98 }}
+            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold tracking-wide
+              transition-all duration-200 ${
+              busy || (!content.trim() && !selectedFile)
+                ? 'bg-bg-border text-slate-600 cursor-not-allowed'
+                : 'bg-blue-500 hover:bg-blue-400 text-white'
+            }`}
+          >
+            {isStreaming ? 'Streaming...' : isLoading ? 'Analyzing...' : 'Analyze'}
+          </MotionButton>
+        </div>
       </div>
     </div>
   )
