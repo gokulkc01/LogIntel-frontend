@@ -81,7 +81,21 @@ export const useAnalysisStore = create(persist((set) => ({
   setStreamProgress: (chunk, total) =>
     set({ streamProgress: { chunk, total } }),
   finalizeStream: (summary) =>
-    set({ isStreaming: false, streamComplete: true, result: summary, lastCompletedResult: summary }),
+    set((s) => {
+      const crossLogAnomalies = summary.cross_log_anomalies || []
+      const finalFindings = [...s.streamFindings, ...crossLogAnomalies]
+      const finalResult = {
+        ...summary,
+        findings: finalFindings,
+      }
+
+      return {
+        isStreaming: false,
+        streamComplete: true,
+        result: finalResult,
+        lastCompletedResult: finalResult,
+      }
+    }),
   reset: () => set({
     result: null, isLoading: false, error: null,
     isStreaming: false, streamFindings: [],
