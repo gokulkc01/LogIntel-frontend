@@ -101,17 +101,11 @@ export const useAnalysisStore = create(persist((set) => ({
   storage: createJSONStorage(() => localStorage),
   partialize: (state) => ({
     theme: state.theme,
-    result: state.result,
-    lastCompletedResult: state.lastCompletedResult,
     inputType: state.inputType,
-    content: state.content,
-    requiresFileReselect: state.selectedFile ? true : state.requiresFileReselect,
-    contentPreviewTruncated: state.contentPreviewTruncated,
-    filename: state.filename,
     options: state.options,
   }),
   merge: (persisted, current) => {
-    const merged = {
+    return {
       ...current,
       ...persisted,
       selectedFile: null,
@@ -121,13 +115,13 @@ export const useAnalysisStore = create(persist((set) => ({
       streamProgress: { chunk: 0, total: 0 },
       streamComplete: false,
       error: null,
+      result: null,
+      lastCompletedResult: null,
+      content: '',
+      filename: '',
+      requiresFileReselect: false,
+      contentPreviewTruncated: false,
     }
-
-    if (merged.requiresFileReselect) {
-      merged.selectedFile = null
-    }
-
-    return merged
   },
 }))
 
